@@ -24,8 +24,9 @@ func futex(addr unsafe.Pointer, op int32, val uint32, ts, addr2 unsafe.Pointer, 
 // Futexsleep is allowed to wake up spuriously.
 
 const (
-	_FUTEX_WAIT = 0
-	_FUTEX_WAKE = 1
+	_FUTEX_PRIVATE_FLAG = 128
+	_FUTEX_WAIT_PRIVATE = 0 | _FUTEX_PRIVATE_FLAG
+	_FUTEX_WAKE_PRIVATE = 1 | _FUTEX_PRIVATE_FLAG
 )
 
 // Atomically,
@@ -42,7 +43,7 @@ func futexsleep(addr *uint32, val uint32, ns int64) {
 	// here, and so can we: as it says a few lines up,
 	// spurious wakeups are allowed.
 	if ns < 0 {
-		futex(unsafe.Pointer(addr), _FUTEX_WAIT, val, nil, nil, 0)
+		futex(unsafe.Pointer(addr), _FUTEX_WAIT_PRIVATE, val, nil, nil, 0)
 		return
 	}
 
@@ -59,13 +60,13 @@ func futexsleep(addr *uint32, val uint32, ns int64) {
 		ts.tv_nsec = 0
 		ts.set_sec(int64(timediv(ns, 1000000000, (*int32)(unsafe.Pointer(&ts.tv_nsec)))))
 	}
-	futex(unsafe.Pointer(addr), _FUTEX_WAIT, val, unsafe.Pointer(&ts), nil, 0)
+	futex(unsafe.Pointer(addr), _FUTEX_WAIT_PRIVATE, val, unsafe.Pointer(&ts), nil, 0)
 }
 
 // If any procs are sleeping on addr, wake up at most cnt.
 //go:nosplit
 func futexwakeup(addr *uint32, cnt uint32) {
-	ret := futex(unsafe.Pointer(addr), _FUTEX_WAKE, cnt, nil, nil, 0)
+	ret := futex(unsafe.Pointer(addr), _FUTEX_WAKE_PRIVATE, cnt, nil, nil, 0)
 	if ret >= 0 {
 		return
 	}
@@ -192,6 +193,8 @@ const (
 )
 
 var procAuxv = []byte("/proc/self/auxv\x00")
+
+var addrspace_vec [1]byte
 
 func mincore(addr unsafe.Pointer, n uintptr, dst *byte) int32
 
@@ -324,38 +327,6 @@ func unminit() {
 	unminitSignals()
 }
 
-func memlimit() uintptr {
-	/*
-		TODO: Convert to Go when something actually uses the result.
-
-		Rlimit rl;
-		extern byte runtime·text[], runtime·end[];
-		uintptr used;
-
-		if(runtime·getrlimit(RLIMIT_AS, &rl) != 0)
-			return 0;
-		if(rl.rlim_cur >= 0x7fffffff)
-			return 0;
-
-		// Estimate our VM footprint excluding the heap.
-		// Not an exact science: use size of binary plus
-		// some room for thread stacks.
-		used = runtime·end - runtime·text + (64<<20);
-		if(used >= rl.rlim_cur)
-			return 0;
-
-		// If there's not at least 16 MB left, we're probably
-		// not going to be able to do much. Treat as no limit.
-		rl.rlim_cur -= used;
-		if(rl.rlim_cur < (16<<20))
-			return 0;
-
-		return rl.rlim_cur - used;
-	*/
-
-	return 0
-}
-
 //#ifdef GOARCH_386
 //#define sa_handler k_sa_handler
 //#endif
@@ -379,8 +350,6 @@ func sigprocmask(how int32, new, old *sigset) {
 	rtsigprocmask(how, new, old, int32(unsafe.Sizeof(*new)))
 }
 
-//go:noescape
-func getrlimit(kind int32, limit unsafe.Pointer) int32
 func raise(sig uint32)
 func raiseproc(sig uint32)
 

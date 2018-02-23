@@ -804,7 +804,7 @@ opswitch:
 		//   a = *var
 		a := n.List.First()
 
-		if w := t.Val().Width; w <= 1024 { // 1024 must match ../../../../runtime/hashmap.go:maxZero
+		if w := t.Val().Width; w <= 1024 { // 1024 must match ../../../../runtime/map.go:maxZero
 			fn := mapfn(mapaccess2[fast], t)
 			r = mkcall1(fn, fn.Type.Results(), init, typename(t), r.Left, key)
 		} else {
@@ -1178,7 +1178,7 @@ opswitch:
 				key = nod(OADDR, key, nil)
 			}
 
-			if w := t.Val().Width; w <= 1024 { // 1024 must match ../../../../runtime/hashmap.go:maxZero
+			if w := t.Val().Width; w <= 1024 { // 1024 must match ../../../../runtime/map.go:maxZero
 				n = mkcall1(mapfn(mapaccess1[fast], t), types.NewPtr(t.Val()), init, typename(t), map_, key)
 			} else {
 				z := zeroaddr(w)
@@ -1665,7 +1665,7 @@ opswitch:
 			a = nod(OADDR, temp(t), nil)
 		}
 
-		n = mkcall("stringtoslicerune", n.Type, init, a, n.Left)
+		n = mkcall("stringtoslicerune", n.Type, init, a, conv(n.Left, types.Types[TSTRING]))
 
 		// ifaceeq(i1 any-1, i2 any-2) (ret bool);
 	case OCMPIFACE:
@@ -2824,7 +2824,7 @@ var mapassign = mkmapnames("mapassign", "ptr")
 var mapdelete = mkmapnames("mapdelete", "")
 
 func mapfast(t *types.Type) int {
-	// Check ../../runtime/hashmap.go:maxValueSize before changing.
+	// Check ../../runtime/map.go:maxValueSize before changing.
 	if t.Val().Width > 128 {
 		return mapslow
 	}
@@ -3215,12 +3215,12 @@ func eqfor(t *types.Type) (n *Node, needsize bool) {
 		sym := typesymprefix(".eq", t)
 		n := newname(sym)
 		n.SetClass(PFUNC)
-		ntype := nod(OTFUNC, nil, nil)
-		ntype.List.Append(anonfield(types.NewPtr(t)))
-		ntype.List.Append(anonfield(types.NewPtr(t)))
-		ntype.Rlist.Append(anonfield(types.Types[TBOOL]))
-		ntype = typecheck(ntype, Etype)
-		n.Type = ntype.Type
+		n.Type = functype(nil, []*Node{
+			anonfield(types.NewPtr(t)),
+			anonfield(types.NewPtr(t)),
+		}, []*Node{
+			anonfield(types.Types[TBOOL]),
+		})
 		return n, false
 	}
 	Fatalf("eqfor %v", t)
@@ -3415,18 +3415,23 @@ func walkcompare(n *Node, init *Nodes) *Node {
 				i++
 				remains -= t.Elem().Width
 			} else {
+				elemType := t.Elem().ToUnsigned()
 				cmplw := nod(OINDEX, cmpl, nodintconst(int64(i)))
-				cmplw = conv(cmplw, convType)
+				cmplw = conv(cmplw, elemType) // convert to unsigned
+				cmplw = conv(cmplw, convType) // widen
 				cmprw := nod(OINDEX, cmpr, nodintconst(int64(i)))
+				cmprw = conv(cmprw, elemType)
 				cmprw = conv(cmprw, convType)
 				// For code like this:  uint32(s[0]) | uint32(s[1])<<8 | uint32(s[2])<<16 ...
 				// ssa will generate a single large load.
 				for offset := int64(1); offset < step; offset++ {
 					lb := nod(OINDEX, cmpl, nodintconst(int64(i+offset)))
+					lb = conv(lb, elemType)
 					lb = conv(lb, convType)
 					lb = nod(OLSH, lb, nodintconst(int64(8*t.Elem().Width*offset)))
 					cmplw = nod(OOR, cmplw, lb)
 					rb := nod(OINDEX, cmpr, nodintconst(int64(i+offset)))
+					rb = conv(rb, elemType)
 					rb = conv(rb, convType)
 					rb = nod(OLSH, rb, nodintconst(int64(8*t.Elem().Width*offset)))
 					cmprw = nod(OOR, cmprw, rb)

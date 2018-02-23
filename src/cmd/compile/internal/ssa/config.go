@@ -89,7 +89,6 @@ type Logger interface {
 
 	// Forwards the Debug flags from gc
 	Debug_checknil() bool
-	Debug_eagerwb() bool
 }
 
 type Frontend interface {
@@ -143,6 +142,7 @@ type Frontend interface {
 type GCNode interface {
 	Typ() *types.Type
 	String() string
+	IsSynthetic() bool
 	StorageClass() StorageClass
 }
 
@@ -292,8 +292,19 @@ func NewConfig(arch string, types Types, ctxt *obj.Link, optimize bool) *Config 
 	if c.nacl {
 		c.noDuffDevice = true // Don't use Duff's device on NaCl
 
-		// runtime call clobber R12 on nacl
-		opcodeTable[OpARMCALLudiv].reg.clobbers |= 1 << 12 // R12
+		// Returns clobber BP on nacl/386, so the write
+		// barrier does.
+		opcodeTable[Op386LoweredWB].reg.clobbers |= 1 << 5 // BP
+
+		// ... and SI on nacl/amd64.
+		opcodeTable[OpAMD64LoweredWB].reg.clobbers |= 1 << 6 // SI
+	}
+
+	if ctxt.Flag_shared {
+		// LoweredWB is secretly a CALL and CALLs on 386 in
+		// shared mode get rewritten by obj6.go to go through
+		// the GOT, which clobbers BX.
+		opcodeTable[Op386LoweredWB].reg.clobbers |= 1 << 3 // BX
 	}
 
 	// cutoff is compared with product of numblocks and numvalues,

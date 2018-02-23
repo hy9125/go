@@ -867,10 +867,10 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	case ssa.OpAMD64POPCNTQ, ssa.OpAMD64POPCNTL:
 		if v.Args[0].Reg() != v.Reg() {
 			// POPCNT on Intel has a false dependency on the destination register.
-			// Zero the destination to break the dependency.
-			p := s.Prog(x86.AMOVQ)
-			p.From.Type = obj.TYPE_CONST
-			p.From.Offset = 0
+			// Xor register with itself to break the dependency.
+			p := s.Prog(x86.AXORQ)
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = v.Reg()
 			p.To.Type = obj.TYPE_REG
 			p.To.Reg = v.Reg()
 		}
@@ -1076,7 +1076,7 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 	case ssa.BlockRet:
 		s.Prog(obj.ARET)
 	case ssa.BlockRetJmp:
-		p := s.Prog(obj.AJMP)
+		p := s.Prog(obj.ARET)
 		p.To.Type = obj.TYPE_MEM
 		p.To.Name = obj.NAME_EXTERN
 		p.To.Sym = b.Aux.(*obj.LSym)

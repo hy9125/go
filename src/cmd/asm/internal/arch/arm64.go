@@ -120,9 +120,14 @@ func arm64RegisterNumber(name string, n int16) (int16, bool) {
 	return 0, false
 }
 
-// ARM64RegisterExtension parses an ARM64 register with extension or arrangment.
+// ARM64RegisterExtension parses an ARM64 register with extension or arrangement.
 func ARM64RegisterExtension(a *obj.Addr, ext string, reg, num int16, isAmount, isIndex bool) error {
 	rm := uint32(reg)
+	if isAmount {
+		if num < 0 || num > 7 {
+			return errors.New("shift amount out of range")
+		}
+	}
 	switch ext {
 	case "UXTB":
 		if !isAmount {
@@ -134,7 +139,7 @@ func ARM64RegisterExtension(a *obj.Addr, ext string, reg, num int16, isAmount, i
 		if !isAmount {
 			return errors.New("invalid register extension")
 		}
-		a.Reg = arm64.REG_UXTH + (num & 31) + int16(num<<5)
+		a.Reg = arm64.REG_UXTH + (reg & 31) + int16(num<<5)
 		a.Offset = int64(((rm & 31) << 16) | (1 << 13) | (uint32(num) << 10))
 	case "UXTW":
 		if !isAmount {
@@ -173,18 +178,39 @@ func ARM64RegisterExtension(a *obj.Addr, ext string, reg, num int16, isAmount, i
 		a.Reg = arm64.REG_SXTX + (reg & 31) + int16(num<<5)
 		a.Offset = int64(((rm & 31) << 16) | (7 << 13) | (uint32(num) << 10))
 	case "B8":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_8B & 15) << 5)
 	case "B16":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_16B & 15) << 5)
 	case "H4":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_4H & 15) << 5)
 	case "H8":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_8H & 15) << 5)
 	case "S2":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_2S & 15) << 5)
 	case "S4":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_4S & 15) << 5)
 	case "D2":
+		if isIndex {
+			return errors.New("invalid register extension")
+		}
 		a.Reg = arm64.REG_ARNG + (reg & 31) + ((arm64.ARNG_2D & 15) << 5)
 	case "B":
 		if !isIndex {
@@ -217,7 +243,7 @@ func ARM64RegisterExtension(a *obj.Addr, ext string, reg, num int16, isAmount, i
 	return nil
 }
 
-// ARM64RegisterArrangement parses an ARM64 vector register arrangment.
+// ARM64RegisterArrangement parses an ARM64 vector register arrangement.
 func ARM64RegisterArrangement(reg int16, name, arng string) (int64, error) {
 	var curQ, curSize uint16
 	if name[0] != 'V' {

@@ -248,7 +248,7 @@ var allAsmTests = []*asmTests{
 	{
 		arch:    "arm64",
 		os:      "linux",
-		imports: []string{"math/bits"},
+		imports: []string{"encoding/binary", "math", "math/bits"},
 		tests:   linuxARM64Tests,
 	},
 	{
@@ -468,7 +468,7 @@ var linuxAMD64Tests = []*asmTest{
 			*t = T2{}
 		}
 		`,
-		pos: []string{"\tXORPS\tX., X", "\tMOVUPS\tX., \\(.*\\)", "\tMOVQ\t\\$0, 16\\(.*\\)", "\tCALL\truntime\\.(writebarrierptr|gcWriteBarrier)\\(SB\\)"},
+		pos: []string{"\tXORPS\tX., X", "\tMOVUPS\tX., \\(.*\\)", "\tMOVQ\t\\$0, 16\\(.*\\)", "\tCALL\truntime\\.gcWriteBarrier\\(SB\\)"},
 	},
 	// Rotate tests
 	{
@@ -1004,6 +1004,20 @@ var linuxAMD64Tests = []*asmTest{
 	},
 	{
 		fn: `
+		func $(a,b [3]int16) bool {
+		    return a == b
+		}`,
+		pos: []string{"\tCMPL\t[A-Z]"},
+	},
+	{
+		fn: `
+		func $(a,b [12]int8) bool {
+		    return a == b
+		}`,
+		pos: []string{"\tCMPQ\t[A-Z]", "\tCMPL\t[A-Z]"},
+	},
+	{
+		fn: `
 		func f70(a,b [15]byte) bool {
 		    return a == b
 		}`,
@@ -1129,7 +1143,7 @@ var linuxAMD64Tests = []*asmTest{
 			return x > 4
 		}
 		`,
-		pos: []string{"\tSETHI\t\\("},
+		pos: []string{"\tSETHI\t.*\\(SP\\)"},
 	},
 	// Check that len() and cap() div by a constant power of two
 	// are compiled into SHRQ.
@@ -2696,6 +2710,198 @@ var linuxARM64Tests = []*asmTest{
 		`,
 		pos: []string{"LSL\t\\$17"},
 		neg: []string{"CMP"},
+	},
+	{
+		fn: `
+		func $(a int32, ptr *int) {
+			if a >= 0 {
+				*ptr = 0
+			}
+		}
+		`,
+		pos: []string{"TBNZ"},
+	},
+	{
+		fn: `
+		func $(a int64, ptr *int) {
+			if a >= 0 {
+				*ptr = 0
+			}
+		}
+		`,
+		pos: []string{"TBNZ"},
+	},
+	{
+		fn: `
+		func $(a int32, ptr *int) {
+			if a < 0 {
+				*ptr = 0
+			}
+		}
+		`,
+		pos: []string{"TBZ"},
+	},
+	{
+		fn: `
+		func $(a int64, ptr *int) {
+			if a < 0 {
+				*ptr = 0
+			}
+		}
+		`,
+		pos: []string{"TBZ"},
+	},
+	{
+		fn: `
+		func $(x uint64) int {
+			return bits.OnesCount64(x)
+		}
+		`,
+		pos: []string{"\tVCNT\t", "\tVUADDLV\t"},
+	},
+	{
+		fn: `
+		func $(x uint32) int {
+			return bits.OnesCount32(x)
+		}
+		`,
+		pos: []string{"\tVCNT\t", "\tVUADDLV\t"},
+	},
+	{
+		fn: `
+		func $(x uint16) int {
+			return bits.OnesCount16(x)
+		}
+		`,
+		pos: []string{"\tVCNT\t", "\tVUADDLV\t"},
+	},
+	// Load-combining tests.
+	{
+		fn: `
+		func $(b []byte) uint64 {
+			return binary.LittleEndian.Uint64(b)
+		}
+		`,
+		pos: []string{"\tMOVD\t\\(R[0-9]+\\)"},
+	},
+	{
+		fn: `
+		func $(b []byte, i int) uint64 {
+			return binary.LittleEndian.Uint64(b[i:])
+		}
+		`,
+		pos: []string{"\tMOVD\t\\(R[0-9]+\\)"},
+	},
+	{
+		fn: `
+		func $(b []byte) uint32 {
+			return binary.LittleEndian.Uint32(b)
+		}
+		`,
+		pos: []string{"\tMOVWU\t\\(R[0-9]+\\)"},
+	},
+	{
+		fn: `
+		func $(b []byte, i int) uint32 {
+			return binary.LittleEndian.Uint32(b[i:])
+		}
+		`,
+		pos: []string{"\tMOVWU\t\\(R[0-9]+\\)"},
+	},
+	{
+		fn: `
+		func $(b []byte) uint64 {
+			return binary.BigEndian.Uint64(b)
+		}
+		`,
+		pos: []string{"\tREV\t"},
+	},
+	{
+		fn: `
+		func $(b []byte, i int) uint64 {
+			return binary.BigEndian.Uint64(b[i:])
+		}
+		`,
+		pos: []string{"\tREV\t"},
+	},
+	{
+		fn: `
+		func $(b []byte) uint32 {
+			return binary.BigEndian.Uint32(b)
+		}
+		`,
+		pos: []string{"\tREVW\t"},
+	},
+	{
+		fn: `
+		func $(b []byte, i int) uint32 {
+			return binary.BigEndian.Uint32(b[i:])
+		}
+		`,
+		pos: []string{"\tREVW\t"},
+	},
+	{
+		fn: `
+		func $(s []byte) uint16 {
+			return uint16(s[0]) | uint16(s[1]) << 8
+		}
+		`,
+		pos: []string{"\tMOVHU\t\\(R[0-9]+\\)"},
+		neg: []string{"ORR\tR[0-9]+<<8\t"},
+	},
+	// Intrinsic tests for math.
+	{
+		fn: `
+		func sqrt(x float64) float64 {
+			return math.Sqrt(x)
+		}
+		`,
+		pos: []string{"FSQRTD"},
+	},
+	{
+		fn: `
+		func ceil(x float64) float64 {
+			return math.Ceil(x)
+		}
+		`,
+		pos: []string{"FRINTPD"},
+	},
+	{
+		fn: `
+		func floor(x float64) float64 {
+			return math.Floor(x)
+		}
+		`,
+		pos: []string{"FRINTMD"},
+	},
+	{
+		fn: `
+		func round(x float64) float64 {
+			return math.Round(x)
+		}
+		`,
+		pos: []string{"FRINTAD"},
+	},
+	{
+		fn: `
+		func trunc(x float64) float64 {
+			return math.Trunc(x)
+		}
+		`,
+		pos: []string{"FRINTZD"},
+	},
+	{
+		// make sure that CSEL is emitted for conditional moves
+		fn: `
+		func f37(c int) int {
+		     x := c + 4
+		     if c < 0 {
+		     	x = 182
+		     }
+		     return x
+		}
+		`,
+		pos: []string{"\tCSEL\t"},
 	},
 }
 

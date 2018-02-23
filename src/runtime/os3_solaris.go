@@ -16,7 +16,6 @@ import "unsafe"
 //go:cgo_import_dynamic libc_exit exit "libc.so"
 //go:cgo_import_dynamic libc_fstat fstat "libc.so"
 //go:cgo_import_dynamic libc_getcontext getcontext "libc.so"
-//go:cgo_import_dynamic libc_getrlimit getrlimit "libc.so"
 //go:cgo_import_dynamic libc_kill kill "libc.so"
 //go:cgo_import_dynamic libc_madvise madvise "libc.so"
 //go:cgo_import_dynamic libc_malloc malloc "libc.so"
@@ -51,7 +50,6 @@ import "unsafe"
 //go:linkname libc_exit libc_exit
 //go:linkname libc_fstat libc_fstat
 //go:linkname libc_getcontext libc_getcontext
-//go:linkname libc_getrlimit libc_getrlimit
 //go:linkname libc_kill libc_kill
 //go:linkname libc_madvise libc_madvise
 //go:linkname libc_malloc libc_malloc
@@ -87,7 +85,6 @@ var (
 	libc_exit,
 	libc_fstat,
 	libc_getcontext,
-	libc_getrlimit,
 	libc_kill,
 	libc_madvise,
 	libc_malloc,
@@ -221,37 +218,6 @@ func minit() {
 // Called from dropm to undo the effect of an minit.
 func unminit() {
 	unminitSignals()
-}
-
-func memlimit() uintptr {
-	/*
-		TODO: Convert to Go when something actually uses the result.
-		Rlimit rl;
-		extern byte runtime·text[], runtime·end[];
-		uintptr used;
-
-		if(runtime·getrlimit(RLIMIT_AS, &rl) != 0)
-			return 0;
-		if(rl.rlim_cur >= 0x7fffffff)
-			return 0;
-
-		// Estimate our VM footprint excluding the heap.
-		// Not an exact science: use size of binary plus
-		// some room for thread stacks.
-		used = runtime·end - runtime·text + (64<<20);
-		if(used >= rl.rlim_cur)
-			return 0;
-
-		// If there's not at least 16 MB left, we're probably
-		// not going to be able to do much. Treat as no limit.
-		rl.rlim_cur -= used;
-		if(rl.rlim_cur < (16<<20))
-			return 0;
-
-		return rl.rlim_cur - used;
-	*/
-
-	return 0
 }
 
 func sigtramp()
